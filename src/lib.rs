@@ -5,6 +5,7 @@
  *
  * Most functionality is served through the [GoogleDrive][crate::GoogleDrive] struct
  *
+ * TODO: Rework example
  * Example:
  *
  * ```
