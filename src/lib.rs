@@ -63,22 +63,33 @@ pub struct GoogleDrive {
     token: AccessToken,
 
     client: Client,
+
+    // TODO: Explore in which cases an api_key is not needed, maybe when using a service account?
+    api_key: String,
 }
 
 impl GoogleDrive {
     /// Create a new Drive client struct. It takes a type that can convert into
     /// an &str (`String` or `Vec<u8>` for example). As long as the function is
     /// given a valid API Key and Secret your requests will work.
-    pub fn new(token: AccessToken) -> Self {
+    pub fn new(token: AccessToken, api_key: String) -> Self {
         let client = Client::builder().timeout(Duration::from_secs(360)).build();
         match client {
-            Ok(c) => Self { token, client: c },
+            Ok(c) => Self {
+                token,
+                client: c,
+                api_key,
+            },
             Err(e) => panic!("creating client failed: {:?}", e),
         }
     }
 
-    pub fn new_with_client(token: AccessToken, client: Client) -> Self {
-        Self { token, client }
+    pub fn new_with_client(token: AccessToken, api_key: String, client: Client) -> Self {
+        Self {
+            token,
+            client,
+            api_key,
+        }
     }
 
     /// Get the currently set authorization token.
@@ -407,6 +418,7 @@ impl GoogleDrive {
             uri,
             f,
             Some(vec![
+                ("key", self.api_key.clone()),
                 ("uploadType", "resumable".to_string()),
                 ("supportsAllDrives", "true".to_string()),
                 ("includeItemsFromAllDrives", "true".to_string()),
@@ -416,6 +428,7 @@ impl GoogleDrive {
         );
 
         let resp = self.client.execute(request).await.unwrap();
+
         match resp.status() {
             StatusCode::OK => (),
             s => {
