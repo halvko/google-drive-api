@@ -3,6 +3,8 @@
  *
  * For more information, the Google Drive v3 API is documented at [developers.google.com/drive/api/v3/reference](https://developers.google.com/drive/api/v3/reference).
  *
+ * Most functionality is served through the [GoogleDrive][crate::GoogleDrive] struct
+ *
  * Example:
  *
  * ```
@@ -377,6 +379,79 @@ impl GoogleDrive {
         let response: File = resp.json().await.unwrap();
 
         Ok(response.id)
+    }
+
+    /// Creates a file in a drive. If you instead want to update it if a file with the same name
+    /// already exists, see [create_or_update_file][Self::create_or_update_file].
+    pub async fn create_file(
+        &self,
+        parent_id: &str,
+        name: &str,
+        mime_type: &str,
+        contents: &[u8],
+    ) -> Result<(), APIError> {
+        // Create the file.
+        let method = Method::POST;
+        let uri = "https://www.googleapis.com/upload/drive/v3/files".to_string();
+        let f = {
+            let mut f: File = Default::default();
+            f.name = name.to_string();
+            f.mime_type = mime_type.to_string();
+            f.parents = vec![parent_id.to_string()];
+            f
+        };
+
+        // Build the request to get the URL upload location if we need to create the file.
+        let request = self.request(
+            method,
+            uri,
+            f,
+            Some(vec![
+                ("uploadType", "resumable".to_string()),
+                ("supportsAllDrives", "true".to_string()),
+                ("includeItemsFromAllDrives", "true".to_string()),
+            ]),
+            &[],
+            "",
+        );
+
+        let resp = self.client.execute(request).await.unwrap();
+        match resp.status() {
+            StatusCode::OK => (),
+            s => {
+                return Err(APIError {
+                    status_code: s,
+                    body: resp.text().await.unwrap(),
+                });
+            }
+        };
+
+        // Get the "Location" header.
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+
+        // Now upload the file to that location.
+        let request = self.request(
+            Method::PUT,
+            location.to_string(),
+            (),
+            None,
+            contents,
+            mime_type,
+        );
+
+        let resp = self.client.execute(request).await.unwrap();
+        match resp.status() {
+            StatusCode::OK => (),
+            StatusCode::CREATED => (),
+            s => {
+                return Err(APIError {
+                    status_code: s,
+                    body: resp.text().await.unwrap(),
+                });
+            }
+        };
+
+        Ok(())
     }
 
     /// Create or update a file in a drive.
